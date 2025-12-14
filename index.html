@@ -5,12 +5,10 @@
     <title>Catálogo de Excursiones</title>
     <base target="_top" />
 
-    <!-- Para GitHub/Vercel: URL do WebApp (fallback quando NÃO estiver rodando dentro do Apps Script) -->
+    <!-- Para GitHub/Vercel: URL do WebApp -->
     <script>
-      const WEBAPP_URL =
-        "https://script.google.com/macros/s/AKfycbwDqVTHLT-xOPDeV0VCnyqyhlq7mxDycLAqIfo3uUkOR_6-_CqMS5BUBy7KPgV4hj8N/exec";
+      window.WEBAPP_URL = "rows.push(";
     </script>
-
 
     <!-- Bootstrap 5 -->
     <link
@@ -113,6 +111,22 @@
           max-width: 100%;
         }
       }
+    
+      /* Banner (logo do repo) */
+      .app-banner {
+        background: #ffffff;
+        border-radius: 0.8rem;
+        padding: 0.5rem;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+      }
+      .app-banner img {
+        width: 100%;
+        height: auto;
+        display: block;
+        max-height: 80px;
+        object-fit: contain;
+      }
+
     </style>
   </head>
   <body>
@@ -224,14 +238,8 @@
     <div class="app-container">
       <!-- Cabeçalho -->
       <header class="mb-3 text-center">
-        <div class="mb-2">
-          <img
-            id="logoImg"
-              src="./img/logo-perla.png"
-            alt="Logo Perla Andina"
-            class="img-fluid"
-            style="max-height: 80px"
-          />
+        <div class="app-banner mb-2">
+          <img src="img/logo-perla.png" alt="Banner">
         </div>
         <h1 class="h4 mb-1" id="appTitle">Catálogo de excursiones</h1>
         <p
@@ -627,72 +635,171 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-      // Bridge: Apps Script (google.script.run) quando rodando como WebApp do GAS,
-      // e fallback para GitHub/Vercel chamando o WebApp via WEBAPP_URL (doPost/doGet).
-      const IS_GAS =
-        typeof google !== 'undefined' &&
-        google.script &&
-        google.script.run &&
-        typeof google.script.run.withSuccessHandler === 'function';
-
-      function gasCall(fnName, args, onSuccess, onFailure) {
-        const success = typeof onSuccess === 'function' ? onSuccess : function () {};
-        const failure =
-          typeof onFailure === 'function'
-            ? onFailure
-            : function (e) {
-                console.error(e);
-              };
-
-        if (IS_GAS) {
-          const runner = google.script.run
-            .withSuccessHandler(success)
-            .withFailureHandler(failure);
-
-          if (typeof runner[fnName] !== 'function') {
-            failure(new Error('Função "' + fnName + '" não encontrada no Code.gs'));
-            return;
-          }
-          runner[fnName].apply(runner, Array.isArray(args) ? args : []);
-          return;
-        }
-
-        // Fallback GitHub/Vercel: tenta POST JSON primeiro (doPost).
-        // Requer que seu WebApp aceite JSON e retorne JSON.
-        const body = JSON.stringify({ fn: fnName, args: Array.isArray(args) ? args : [] });
-
-        fetch(WEBAPP_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: body
-        })
-          .then(function (r) {
-            return r.json();
-          })
-          .then(success)
-          .catch(function (errPost) {
-            // Fallback 2: tenta GET com query (?fn=...&args=...) (doGet).
-            const url =
-              WEBAPP_URL +
-              '?fn=' +
-              encodeURIComponent(fnName) +
-              '&args=' +
-              encodeURIComponent(JSON.stringify(Array.isArray(args) ? args : []));
-
-            fetch(url)
-              .then(function (r) {
-                return r.json();
-              })
-              .then(success)
-              .catch(function (errGet) {
-                // Observação: se o erro for CORS no GitHub/Vercel, o browser bloqueia a resposta.
-                // Nesse caso, o WebApp precisa ser preparado para CORS/JSONP.
-                failure(errGet || errPost);
-              });
-          });
+      /* ESTADO GLOBAL */
+      /* Runner híbrido: google.script.run (GAS) ou fetch (GitHub/Vercel) */
+      function isGASEnvironment_() {
+        return (
+          typeof google !== 'undefined' &&
+          google &&
+          google.script &&
+          google.script.run
+        );
       }
 
-      /* ESTADO GLOBAL */
+      function normalizeApiResponse_(obj) {
+        if (
+          obj &&
+          typeof obj.ok === 'boolean' &&
+          Object.prototype.hasOwnProperty.call(obj, 'data')
+        ) {
+          return obj;
+        }
+        return { ok: true, data: obj, error: null };
+      }
+
+      function apiCall(fnName, payload) {
+        return new Promise(function (resolve) {
+          try {
+            if (isGASEnvironment_()) {
+              var runner = const onLoadSuccess_ = function (data) {
+            catalogData =
+              data || {
+                categories: [],
+                items: [],
+                headers: [],
+                logoUrl: '',
+                rates: { brl: null, usd: null },
+                defaultPhone: '',
+                obsCols: { es: -1, pt: -1, en: -1 }
+              };
+
+            if (catalogData.logoUrl) {
+              const img = document.getElementById('logoImg');
+              img.src = catalogData.logoUrl;
+            }
+
+            if (catalogData.rates) {
+              exchangeRates.brl = catalogData.rates.brl || null;
+              exchangeRates.usd = catalogData.rates.usd || null;
+            }
+            if (catalogData.defaultPhone) {
+              whatsappPhone = String(catalogData.defaultPhone);
+            }
+
+            if (data && data.obsCols) {
+              obsColIndexes.es = data.obsCols.es;
+              obsColIndexes.pt = data.obsCols.pt;
+              obsColIndexes.en = data.obsCols.en;
+              obsColumnsComputed = true;
+            }
+
+            // carrega cache local
+            const cached = loadAppStateFromStorage();
+            if (cached) {
+              if (cached.lang) currentLang = cached.lang;
+              if (cached.currency) currentCurrency = cached.currency;
+            }
+
+            updateLanguageButtons();
+            updateCurrencyButtons();
+            applyTranslations();
+            renderCategories();
+
+            document.getElementById('loadingOverlay').style.display = 'none';
+
+            const cartBtn = document.getElementById('cartFloatingBtn');
+            cartBtn.classList.remove('d-none');
+            cartBtn.classList.remove('btn-danger');
+            cartBtn.classList.add('btn-primary');
+            updateCartUI();
+
+            loginModalInstance = new bootstrap.Modal(
+              document.getElementById('loginModal')
+            );
+
+            // pré-preenche campos do cache
+            if (cached) {
+              if (cached.loginName) {
+                document.getElementById('loginNameInput').value =
+                  cached.loginName;
+              }
+              if (cached.guestName) {
+                document.getElementById('guestNameInput').value =
+                  cached.guestName;
+              }
+              if (cached.phoneCountry) {
+                document.getElementById(
+                  'guestPhoneCountryInput'
+                ).value = cached.phoneCountry;
+              }
+              if (cached.phone) {
+                document.getElementById('guestPhoneInput').value =
+                  cached.phone;
+              }
+              if (cached.hotel) {
+                document.getElementById('hotelInput').value = cached.hotel;
+              }
+            }
+
+            loginModalInstance.show();
+
+            document.addEventListener('keydown', function (e) {
+              if (e.key === 'Escape' || e.key === 'Esc') {
+                closeAllModals();
+              }
+            });
+          };
+        const onLoadFailure_ = function (err) {
+                  var msg = err && err.message ? err.message : String(err || 'ERROR');
+                  resolve({ ok: false, data: null, error: msg });
+                });
+
+              if (!runner[fnName]) {
+                resolve({ ok: false, data: null, error: 'FN_NOT_FOUND: ' + fnName });
+                return;
+              }
+
+              if (typeof payload === 'undefined') runner[fnName]();
+              else runner[fnName](payload);
+              return;
+            }
+
+            var url = String(window.WEBAPP_URL || '').trim();
+            if (!url) {
+              resolve({ ok: false, data: null, error: 'WEBAPP_URL_NAO_CONFIGURADO' });
+              return;
+            }
+
+            fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight
+              body: JSON.stringify({ action: fnName, payload: payload })
+            })
+              .then(function (resp) {
+                if (!resp.ok) throw new Error('HTTP_' + resp.status);
+                return resp.text();
+              })
+              .then(function (txt) {
+                var parsed = null;
+                try {
+                  parsed = JSON.parse(txt);
+                } catch (e) {
+                  resolve({ ok: false, data: null, error: 'JSON_INVALIDO' });
+                  return;
+                }
+                resolve(normalizeApiResponse_(parsed));
+              })
+              .catch(function (err) {
+                var msg = err && err.message ? err.message : String(err || 'ERROR');
+                resolve({ ok: false, data: null, error: msg });
+              });
+          } catch (e) {
+            var msg = e && e.message ? e.message : String(e || 'ERROR');
+            resolve({ ok: false, data: null, error: msg });
+          }
+        });
+      }
+
 
       let catalogData = {
         categories: [],
@@ -913,10 +1020,8 @@
       };
 
       document.addEventListener('DOMContentLoaded', function () {
-        gasCall(
-          'getCatalogoData',
-          [],
-          function (data) {
+        google.script.run
+          .withSuccessHandler(function (data) {
             catalogData =
               data || {
                 categories: [],
@@ -978,7 +1083,22 @@
                 document.getElementById('loginNameInput').value =
                   cached.loginName;
               }
-              // Obs: campos do checkout (pax/telefone/hotel) devem abrir limpos.
+              if (cached.guestName) {
+                document.getElementById('guestNameInput').value =
+                  cached.guestName;
+              }
+              if (cached.phoneCountry) {
+                document.getElementById(
+                  'guestPhoneCountryInput'
+                ).value = cached.phoneCountry;
+              }
+              if (cached.phone) {
+                document.getElementById('guestPhoneInput').value =
+                  cached.phone;
+              }
+              if (cached.hotel) {
+                document.getElementById('hotelInput').value = cached.hotel;
+              }
             }
 
             loginModalInstance.show();
@@ -988,14 +1108,24 @@
                 closeAllModals();
               }
             });
-                    },
-          function (err) {
+          })
+          .withFailureHandler(function (err) {
             console.error(err);
             document.getElementById('loadingOverlay').innerHTML =
               '<div class="text-center text-danger">Error al cargar datos.</div>';
-                    }
-        );
-      });
+          };
+
+        apiCall('getCatalogoData')
+          .then(function (apiRes) {
+            if (!apiRes || !apiRes.ok) {
+              onLoadFailure_(apiRes);
+              return;
+            }
+            onLoadSuccess_(apiRes.data);
+          })
+          .catch(onLoadFailure_);
+});
+
       function closeAllModals() {
         const ids = [
           'loginModal',
@@ -1173,10 +1303,7 @@
         const originalText = btn.textContent;
         btn.textContent = '...';
 
-        gasCall(
-          'loginUser',
-          [name],
-          function (res) {
+        const onLoginSuccess_ = function (res) {
             btn.disabled = false;
             btn.textContent = originalText;
 
@@ -1213,8 +1340,8 @@
 
             const searchInput = document.getElementById('searchInput');
             if (searchInput) searchInput.focus();
-                    },
-          function (err) {
+          };
+        const onLoginFailure_ = function (err) {
             console.error(err);
             btn.disabled = false;
             btn.textContent = originalText;
@@ -1234,8 +1361,18 @@
               loginModalInstance.hide();
             }
             saveAppStatePartial();
-                    }
-        );
+          };
+
+        apiCall('loginUser', name)
+          .then(function (apiRes) {
+            if (!apiRes || !apiRes.ok) {
+              onLoginFailure_(apiRes);
+              return;
+            }
+            onLoginSuccess_(apiRes.data);
+          })
+          .catch(onLoginFailure_);
+
       }
 
       /* BUSCA */
@@ -1846,8 +1983,6 @@
         const cartItem = {
           category: item.category || '',
           name: name,
-          actividad: actividad,
-          categoria: categoria,
           priceArs: priceNumber,
           comisionArs: comisionNumber,
           netoArs: netoNumber,
@@ -2046,19 +2181,6 @@
 
       /* CHECKOUT / WHATSAPP */
 
-      function clearCheckoutGuestInputs() {
-        const ids = [
-          'guestNameInput',
-          'guestPhoneCountryInput',
-          'guestPhoneInput',
-          'hotelInput'
-        ];
-        ids.forEach(function (id) {
-          const el = document.getElementById(id);
-          if (el) el.value = '';
-        });
-      }
-
       function openCheckoutModal() {
         const t = I18N[currentLang];
 
@@ -2066,8 +2188,6 @@
           alert(t.alertCartEmpty);
           return;
         }
-
-        clearCheckoutGuestInputs();
 
         const container = document.getElementById('checkoutItemsContainer');
         container.innerHTML = '';
@@ -2259,43 +2379,47 @@
           totalArs: totalArs
         };
 
-        gasCall(
-          'registrarReserva',
-          [payload],
-          function (res) {
+        const onSaveSuccess_ = function (res) {
             setSendingOverlayVisible(false);
-
-            if (!res || !res.ok) {
-              const msg =
-                (res && (res.message || res.error)) ||
-                'Error al guardar la reserva en la planilla.';
-              alert(msg);
-              return;
-            }
-
             window.open(url, '_blank');
-                    },
-          function (err) {
+          };
+        const onSaveFailure_ = function (err) {
             console.error(err);
             setSendingOverlayVisible(false);
+            window.open(url, '_blank');
+          };
 
-            const msg =
-              (err && (err.message || err.toString && err.toString())) ||
-              'Error al guardar la reserva en la planilla.';
-            alert(msg);
-                    }
-        );
+        apiCall('registrarReserva', payload)
+          .then(function (apiRes) {
+            if (!apiRes || !apiRes.ok) {
+              onSaveFailure_(apiRes);
+              return;
+            }
+            onSaveSuccess_(apiRes.data);
+          })
+          .catch(onSaveFailure_);
+
       }
 
       function generateConsultaId() {
         const prefix =
           (currentUserContext.prefijo || '') + (currentUserContext.id || '');
         const rand = generateRandomLetters(3);
-        // ex.: NV1 - 3FR
-        return prefix + ' - ' + rand;
+        // ex.: NV1-3FR
+        return normalizeConsultaId_(prefix + '-' + rand);
       }
 
-      function generateRandomLetters(n) {
+      
+      function normalizeConsultaId_(s) {
+        s = (s || '').toString();
+        // remove espaços e normaliza hífens
+        s = s.replace(/[–—]/g, '-');
+        s = s.replace(/\s+/g, '');
+        s = s.replace(/-+/g, '-');
+        return s;
+      }
+
+function generateRandomLetters(n) {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         let out = '';
         for (let i = 0; i < n; i++) {
